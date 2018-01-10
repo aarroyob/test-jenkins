@@ -1,7 +1,7 @@
 package org.jenkinsci.plugins.sqlplusscriptrunner;
 
+import java.io.File;
 import java.io.IOException;
-import java.util.Objects;
 
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
@@ -9,7 +9,6 @@ import org.kohsuke.stapler.StaplerRequest;
 import hudson.AbortException;
 import hudson.EnvVars;
 import hudson.Extension;
-import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
@@ -28,6 +27,9 @@ public class SQLPlusRunnerBuilder extends Builder {
 	private final String script;
 	private final String scriptContent;
 	private final String customOracleHome;
+
+	private static final String WORKSPACE_DIR = "workspace";
+	private static final String BUILDS_DIR = "builds";
 
 	@DataBoundConstructor
 	public SQLPlusRunnerBuilder(String user, String password, String instance, String scriptType, String script,
@@ -87,29 +89,33 @@ public class SQLPlusRunnerBuilder extends Builder {
 		String pwd = password;
 		int positionSlash = usr.indexOf(SLASH);
 		if (positionSlash > 0) {
-			pwd = usr.substring(positionSlash+1);
+			pwd = usr.substring(positionSlash + 1);
 			usr = usr.substring(0, positionSlash);
 		}
 
-		SQLPlusRunner sqlPlusRunner = new SQLPlusRunner(listener, getDescriptor().isHideSQLPlusVersion(), usr, pwd,
-				env.expand(instance), env.expand(sqlScript), getDescriptor().oracleHome, scriptType, customOracleHome,
-				getDescriptor().tryToDetectOracleHome, getDescriptor().isDebug());
+		SQLPlusRunner sqlPlusRunner = new SQLPlusRunner(build,listener, launcher, getDescriptor().isHideSQLPlusVersion(), usr,
+				pwd, env.expand(instance), env.expand(sqlScript), getDescriptor().oracleHome, scriptType,
+				customOracleHome, getDescriptor().tryToDetectOracleHome, getDescriptor().isDebug());
 
 		try {
-			// The FilePath executing this callable can be used in the #invoke
-			// method to get access to
-			// the virtual file. Operations will happen either on the slave or
-			// on the master node, and results
-			// will be serialized back to the master.
-			FilePath fp = build.getWorkspace();
-			if (fp != null)
-				fp.act(Objects.requireNonNull(sqlPlusRunner));
-			else
-				throw new AbortException("Filepath null!");
+			String buildPath = build.getRootDir().getCanonicalPath();
+			String sqlPath = buildPath.substring(0, buildPath.indexOf(BUILDS_DIR)) + File.separator + WORKSPACE_DIR;
+
+			File dirSQLPath = new File(sqlPath);
+			if (ScriptType.userDefined.name().equals(scriptType)) {
+				dirSQLPath = new File(sqlPath);
+				sqlScript = scriptContent;
+				if (!dirSQLPath.exists()) {
+				} else {
+					dirSQLPath.mkdirs();
+					sqlScript = script;
+				}
+			}
+
+			sqlPlusRunner.run(dirSQLPath);
+
 		} catch (Exception e) {
-			// Either throw an abort exception, or just log the error, set build
-			// result to failure or unstable
-			// and then proceed with other build steps.
+
 			e.printStackTrace(listener.getLogger());
 			throw new AbortException(e.getMessage());
 		}
