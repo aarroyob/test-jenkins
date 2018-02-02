@@ -318,12 +318,12 @@ public class SQLPlusRunner implements Serializable {
 
 //			launcher.launch().cmds(args).envs(envVars).stdout(listener);
 
-			ProcStarter ps = launcher.new ProcStarter();
-			ps.envs(envVars);
-			ps = ps.cmds(args).stdout(listener);
-			ps = ps.pwd(build.getWorkspace()).envs(build.getEnvironment(listener));
-			Proc proc = launcher.launch(ps);
-			exitCode = proc.join();
+            exitCode = launcher.launch()
+                    .cmds(args)
+                    .envs(build.getEnvironment(listener))
+                    .stdout(listener)
+                    .pwd(build.getModuleRoot())
+                    .join();
 
 			listener.getLogger().printf(Messages.SQLPlusRunner_processEnd() + " %d%n", exitCode);
 //			listener.getLogger().printf(Messages.SQLPlusRunner_processEnd());
